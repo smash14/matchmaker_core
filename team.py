@@ -64,6 +64,9 @@ class Team:
         except IndexError:
             pass
 
+    def get_total_consecutive_matches(self):
+        return self._total_consecutive_matches
+
     def get_total_home_matches(self):
         return self._total_home_matches
 
@@ -92,6 +95,17 @@ class Team:
         # print(f"{self.team_name} hat noch {free_match_days} freie Heimspiele")
         return free_match_days
 
+    def get_amount_of_matches_until_date(self, date):
+        total_matches = [0, 0]  # H / A
+        for match in self._dates_matches:
+            if match[1] <= date:
+                if match[0] == "H":
+                    total_matches[0] += 1
+                else:
+                    total_matches[1] += 1
+        return total_matches
+
+
     def get_list_of_opponents(self, home_or_away="all"):
         """
         Returns a list of scheduled matches with opponents
@@ -106,3 +120,7 @@ class Team:
                 opponents.append(match[2])
         return opponents
 
+    def get_date_of_match_nr(self, match_nr):
+        if match_nr >= self._total_matches or match_nr < 0:  # Starting at 0 ?!
+            return None
+        return self._dates_matches[match_nr][1]

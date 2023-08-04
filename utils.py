@@ -22,3 +22,9 @@ def convert_date_string_list_to_datetime(string_list, return_first_entry=False):
 def convert_date_string_to_datetime(string_date):
     datetime_object = datetime.strptime(string_date, '%Y-%m-%d')
     return datetime_object
+
+
+def check_for_consecutive_dates(date1, date2):
+    if abs((date1 - date2).days) == 1:
+        return True
+    return False

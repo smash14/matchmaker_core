@@ -1,7 +1,9 @@
 import json
-from itertools import count
+import random
+from time import sleep
 
-from utils import convert_date_string_to_datetime, convert_date_string_list_to_datetime
+from utils import convert_date_string_to_datetime, convert_date_string_list_to_datetime, check_for_consecutive_dates
+from evaluate_plan import get_total_consecutive_matches, get_end_of_first_round
 from team import Team
 from datetime import datetime
 import pandas
@@ -9,13 +11,17 @@ import pandas
 
 def get_all_match_dates(teams, start_date):
     match_dates = []
-    start_date = convert_date_string_to_datetime(start_date)
+    try:
+        start_date = convert_date_string_to_datetime(start_date)
+    except ValueError:
+        # print(f"First Round start date not given or invalid ({start_date})")
+        start_date = datetime(1970, 1, 1)
     for team in teams:
         available_dates = team.available_dates_home_matches
         for date in available_dates:
             if date not in match_dates and date >= start_date:
                 match_dates.append(date)
-    print(f"Found {len(match_dates)} possible match dates")
+    # print(f"Found {len(match_dates)} possible match dates")
     return sorted(match_dates)  # TODO: Sorting redundant?
 
 
@@ -36,22 +42,57 @@ def map_general_match_dates_to_teams(teams, all_match_dates):
     return map_general
 
 
-def create_match_plan(general_map, start_date_sec_round):
+def create_match_plan(general_map, end_date_first_round, start_date_sec_round, consecutive_matches, shuffle_matches):
     def _sort_teams_by_least_free_home_match_days():
         def __get_free_home_matches(elem):
             return elem.get_free_home_match_days_after_date(entry['datetime'])
-
         if (len(entry['home_match'])) > 1:
             entry['home_match'] = sorted(entry['home_match'], key=__get_free_home_matches)
 
     def _sort_teams_by_least_total_match_days():
         def __get_total_matches(elem):
             return elem.get_total_matches()
-
         if (len(entry['away_match'])) > 1:
             entry['away_match'] = sorted(entry['away_match'], key=__get_total_matches)
 
-    def _debug_sort_output():
+    def _shuffle_match_list():
+        home_team_list = entry['home_match']
+        away_team_list = entry['away_match']
+        shuffle_part_home = round(len(home_team_list) * shuffle_matches[1])
+        shuffle_part_away = round(len(away_team_list) * shuffle_matches[1])
+        copy_home_team_list = home_team_list[:shuffle_part_home]
+        copy_away_team_list = away_team_list[:shuffle_part_away]
+        random.shuffle(copy_home_team_list)
+        random.shuffle(copy_away_team_list)
+        entry['home_match'][:shuffle_part_home] = copy_home_team_list
+        entry['away_match'][:shuffle_part_away] = copy_away_team_list
+        # print(f"Shuffle Part Home: {shuffle_part_home}")
+        # print(f"Shuffle Part Away: {shuffle_part_away}")
+        # print("")
+
+    def _is_next_match_consecutive(curr_team):
+        last_match_date = curr_team.get_last_match_date()
+        if last_match_date is None:
+            return False
+        curr_match_date = entry['datetime']
+        if check_for_consecutive_dates(last_match_date, curr_match_date):
+            return True
+        return False
+
+    def _allow_consecutive_match():
+        if consecutive_matches[0] == 0:
+            return False
+        rand_number = random.randint(0, 100)
+        given_probability = consecutive_matches[1]
+        if given_probability >= rand_number:
+            # print(f"allow sunday match: True")
+            return True
+        # print(f"allow sunday match: False")
+        return False
+
+    def _debug_sort_output(headline_print_text):
+        print("")
+        print(f"----------- {headline_print_text} for {entry['datetime'].strftime('%d.%m.%Y')} -----------")
         data_home_team = []
         headers_data_home = ["Home Team", "Matches", "(H)", "(A)",
                              "Free Home Days", "(Total)"]
@@ -80,17 +121,29 @@ def create_match_plan(general_map, start_date_sec_round):
             print("")
 
     def _match_two_opponents(first_round=True):
-        print("")
-        print(f"----------- Sorting Opponents for {entry['datetime'].strftime('%d.%m.%Y')} -----------")
         _sort_teams_by_least_free_home_match_days()
         _sort_teams_by_least_total_match_days()
-        _debug_sort_output()
-        print(f"----- Matching Opponents for {entry['datetime'].strftime('%d.%m.%Y')} -----")
+        # _debug_sort_output("Sorting Opponents")
+        if shuffle_matches[0] == 1:
+            _shuffle_match_list()
+            # _debug_sort_output("Shuffle Opponents")
+        # print(f"----- Matching Opponents for {entry['datetime'].strftime('%d.%m.%Y')} -----")
 
         for curr_home_team in entry['home_match']:
+            home_team_already_matched = False
+            if _is_next_match_consecutive(curr_home_team):
+                if not _allow_consecutive_match():
+                    continue  # Skip if next match would be a consecutive match which is not allowed
             for curr_away_team in entry['away_match']:
+                if home_team_already_matched:
+                    continue  # Skip if current home team already has a matched partner in this round
                 if curr_home_team.team_name == curr_away_team.team_name:
                     continue  # Skip as home team can not play against itself
+                if any(curr_away_team in sublist for sublist in thisdict['matches']):
+                    continue  # Skip if other team alredy has a match in this rounf
+                if _is_next_match_consecutive(curr_away_team):
+                    if not _allow_consecutive_match():
+                        continue  # Skip if next match would be a consecutive match which is not allowed
                 if first_round:
                     already_scheduled_opponents = curr_away_team.get_list_of_opponents()
                 else:
@@ -98,26 +151,35 @@ def create_match_plan(general_map, start_date_sec_round):
                 if curr_home_team.team_name in already_scheduled_opponents:
                     continue  # Skip if there is already a match planned between both teams
                 if not first_round:
-                    start_date_sec_round_date = convert_date_string_to_datetime(start_date_sec_round)
+                    try:
+                        start_date_sec_round_date = convert_date_string_to_datetime(start_date_sec_round)
+                    except ValueError:
+                        # print(f"Second Round start date not given or invalid ({start_date_sec_round})")
+                        start_date_sec_round_date = datetime(1970, 1, 1)
                     if entry['datetime'] < start_date_sec_round_date:
-                        continue  # Start second round not until a given start date
-
+                        continue  # Don't Start second round until a given start date
+                """
                 # remove home team from home match list and away match list
-                entry['home_match'].remove(curr_home_team)
-                entry['away_match'].remove(curr_home_team)
+                if curr_home_team in entry['home_match']:
+                    entry['home_match'].remove(curr_home_team)
+                if curr_home_team in entry['away_match']:
+                    entry['away_match'].remove(curr_home_team)
 
                 # remove away team from away match and home match list, if needed
-                entry['away_match'].remove(curr_away_team)
+                if curr_away_team in entry['away_match']:
+                    entry['away_match'].remove(curr_away_team)
                 if curr_away_team in entry['home_match']:
                     entry['home_match'].remove(curr_away_team)
+                """
 
                 #  Modify team objects
                 curr_home_team.add_home_match_date(entry['datetime'], curr_away_team.team_name)
                 curr_away_team.add_away_match_date(entry['datetime'], curr_home_team.team_name)
 
                 thisdict['matches'].append([curr_home_team, curr_away_team])
+                home_team_already_matched = True
 
-                print(f"-> {curr_home_team.team_name} -vs- {curr_away_team.team_name}")
+                # print(f"-> {curr_home_team.team_name} -vs- {curr_away_team.team_name}")
 
     def _check_round_complete(first_round=True):
         if first_round:
@@ -135,21 +197,23 @@ def create_match_plan(general_map, start_date_sec_round):
             if team.get_free_home_match_days_after_date(last_home_match[1]) < least_free_home_matches[1]:
                 least_free_home_matches[1] = team.get_free_home_match_days_after_date(last_home_match[1])
                 least_free_home_matches[0] = team.team_name
-        print("")
+        # print("")
         if first_round:
-            print("====== FIRST ROUND DONE ======")
+            # print("====== FIRST ROUND DONE ======")
+            pass
         else:
-            print("====== SECOND ROUND DONE ======")
-        print(f"Expected matches for first round: {expected_games}")
-        print(f"All Teams are scheduled for {expected_games} matches after first round.")
-        print(f"Last match for first round is scheduled on {last_home_match[1].strftime('%d.%m.%Y')}")
-        print(f"Least free home match days is {least_free_home_matches[1]} for team '{least_free_home_matches[0]}'"
-              f" which already has scheduled {team.get_total_home_matches()} matches")
+            # print("====== SECOND ROUND DONE ======")
+            pass
+        # print(f"Expected matches for first round: {expected_games}")
+        # print(f"All Teams are scheduled for {expected_games} matches after first round.")
+        # print(f"Last match for first round is scheduled on {last_home_match[1].strftime('%d.%m.%Y')}")
+        # print(f"Least free home match days is {least_free_home_matches[1]} for team '{least_free_home_matches[0]}'"
+        #       f" which already has scheduled {team.get_total_home_matches()} matches")
         return True
 
     map_final = []
-    print("")
-    print("====== MATCHING PHASE ======")
+    # print("")
+    # print("====== MATCHING PHASE ======")
     first_round_done = False
     second_round_done = False
     for entry in general_map:
@@ -182,24 +246,77 @@ if __name__ == '__main__':
     teams_json = parsed_json['teams']
     start_date_first_round = parsed_json['start_date_first_round']
     start_date_second_round = parsed_json['start_date_second_round']
+    end_date_first_round = parsed_json['end_date_first_round']
     general_blocked_dates = parsed_json['general_blocked_dates']
+    allow_consecutive_matches = [parsed_json['consecutive_matches']['allow'],
+                                 parsed_json['consecutive_matches']['probability']]
+    allow_shuffle_matches = [parsed_json['shuffle_matches']['allow'],
+                             parsed_json['shuffle_matches']['shuffle_part']]
+    iterations = parsed_json['iterations']
 
-    # Create an instance for every team within the json file
-    all_teams = [Team(team_line,
-                      convert_date_string_list_to_datetime(teams_json[team_line]['available_dates_home_matches']),
-                      convert_date_string_list_to_datetime(teams_json[team_line]['blocked_dates_matches']))
-                 for team_line in teams_json]
-    print(f"Created an instance for {len(all_teams)} Teams")
+    match_plan = []
+    for i in range(iterations):
+        try:
+            # Create an instance for every team within the json file
+            all_teams = [Team(team_line,
+                              convert_date_string_list_to_datetime(teams_json[team_line]['available_dates_home_matches']),
+                              convert_date_string_list_to_datetime(teams_json[team_line]['blocked_dates_matches']))
+                         for team_line in teams_json]
+            # print(f"Created an instance for {len(all_teams)} Teams")
 
-    # Determine all possible match days
-    all_match_dates = get_all_match_dates(all_teams, start_date_first_round)
+            # Determine all possible match days
+            all_match_dates = get_all_match_dates(all_teams, start_date_first_round)
 
-    # Map match dates to all teams
-    map_all_combinations = map_general_match_dates_to_teams(all_teams, all_match_dates)
+            # Map match dates to all teams
+            map_all_combinations = map_general_match_dates_to_teams(all_teams, all_match_dates)
 
-    # Create a match plan
-    match_plan = create_match_plan(map_all_combinations, start_date_second_round)
+            # Create a match plan
 
-    print(match_plan)
+            match_plan = create_match_plan(map_all_combinations, end_date_first_round, start_date_second_round,
+                                           allow_consecutive_matches, allow_shuffle_matches)
+            print(f"Found a match plan on run {i+1}")
+           # sleep(5)
+            break
+        except Exception as e:
+            #sleep(1)
+            print(f"Run {i}: Was not able to create a matching plan")
+
+    if match_plan:
+        headers_data_match_plan = ["Datum", "Heimmannschaft", "(H)", "(A)", "", "Gastmannschaft", "(H)", "(A)"]
+        # print("=================== FINAL MATCH PLAN ===================")
+        end_of_first_round = get_end_of_first_round(all_teams)
+        match_plan_to_print = []
+        for match_day in match_plan:
+            if match_day['matches']:
+                match_date = match_day['datetime']
+                #print(f"{match_date.strftime('%d.%m.%Y')}:")
+                for match in match_day['matches']:
+                    match_plan_to_print.append([match_date.strftime('%d.%m.'),
+                                                match[0].team_name,
+                                                match[0].get_amount_of_matches_until_date(match_date)[0],
+                                                match[0].get_amount_of_matches_until_date(match_date)[1],
+                                                "-vs-",
+                                                match[1].team_name,
+                                                match[1].get_amount_of_matches_until_date(match_date)[0],
+                                                match[1].get_amount_of_matches_until_date(match_date)[1]])
+                if match_day['datetime'] == end_of_first_round:
+                    match_plan_to_print.append(["--", "--", "--", "--", "--", "--", "--", "--"])
+        pandas.set_option('display.max_colwidth', None)
+        pandas.set_option('display.max_columns', None)
+        pandas.set_option('display.width', None)
+        data_table = pandas.DataFrame(match_plan_to_print, columns=headers_data_match_plan)
+        print(data_table)
+        print("")
+        print(f"End of first round: {end_of_first_round.strftime('%d.%m.%Y')}")
+    else:
+        print("")
+        print("=======================================")
+        print("Was not able to create a match plan :-(")
+    print("Press Enter to continue ...")
+    input()
+
+
+
+
 
     # print(mtv_luebeck.available_dates_home_matches)
