@@ -234,24 +234,51 @@ def create_match_plan(general_map, end_date_first_round, start_date_sec_round, c
 
 if __name__ == '__main__':
     tprint("Ligaman +")
+    print("===== V0.1 =====")
+    print("")
     # Parse json file
-    with open('teams.json') as file:
-        file_contents = file.read()
-    parsed_json = json.loads(file_contents)
-    teams_json = parsed_json['teams']
-    weight = parsed_json['weight']
-    start_date_first_round = parsed_json['start_date_first_round']
-    start_date_second_round = parsed_json['start_date_second_round']
-    end_date_first_round = parsed_json['end_date_first_round']
-    general_blocked_dates = parsed_json['general_blocked_dates']
-    allow_consecutive_matches = [parsed_json['consecutive_matches']['allow'],
-                                 parsed_json['consecutive_matches']['probability']]
-    allow_shuffle_matches = [parsed_json['shuffle_matches']['allow'],
-                             parsed_json['shuffle_matches']['shuffle_part']]
-    iterations = parsed_json['max_iterations']
-    if iterations == 0:
-        iterations = sys.maxsize
-    return_on_first_match_plan = parsed_json['return_on_first_match_plan']
+    try:
+        with open('teams.json') as file:
+            file_contents = file.read()
+    except FileNotFoundError:
+        print("Fehler, konnte die teams.json Datei nicht finden")
+        input("Druecke eine Taste um zu beenden ...")
+        sys.exit(1)
+
+    try:
+        parsed_json = json.loads(file_contents)
+        teams_json = parsed_json['teams']
+        weight = parsed_json['weight']
+        start_date_first_round = parsed_json['start_date_first_round']
+        start_date_second_round = parsed_json['start_date_second_round']
+        end_date_first_round = parsed_json['end_date_first_round']
+        general_blocked_dates = parsed_json['general_blocked_dates']
+        allow_consecutive_matches = [parsed_json['consecutive_matches']['allow'],
+                                     parsed_json['consecutive_matches']['probability']]
+        allow_shuffle_matches = [parsed_json['shuffle_matches']['allow'],
+                                 parsed_json['shuffle_matches']['shuffle_part']]
+        iterations = parsed_json['max_iterations']
+        if iterations == 0:
+            iterations = sys.maxsize
+        return_on_first_match_plan = parsed_json['return_on_first_match_plan']
+    except Exception as e:
+        print("Fehler beim Verarbeiten der teams.json Datei mit folgender Fehlermeldung:")
+        print("")
+        print(e)
+        input("Druecke eine Taste um zu Beenden ...")
+        sys.exit(1)
+
+    tmp_team = [Team(team_line,
+                      convert_date_string_list_to_datetime(teams_json[team_line]['available_dates_home_matches']),
+                      convert_date_string_list_to_datetime(teams_json[team_line]['blocked_dates_matches']),
+                      convert_date_string_list_to_datetime(teams_json[team_line]['please_dont_play_dates'])
+                      )
+                 for team_line in teams_json]
+
+    print(f"{len(tmp_team)} Vereine gefunden. Versuche Spielplan zu erstellen:")
+    print("")
+    sleep(5)
+
 
     match_plan = []
     report_match_plan = pandas.DataFrame()
@@ -279,7 +306,7 @@ if __name__ == '__main__':
             curr_match_plan = create_match_plan(map_all_combinations, end_date_first_round, start_date_second_round,
                                            allow_consecutive_matches, allow_shuffle_matches)
 
-            curr_score, curr_report = calculate_score(weight, all_teams)
+            curr_score, curr_report = calculate_score(weight, all_teams, curr_match_plan)
 
             if curr_score < score:
                 score = curr_score
@@ -306,8 +333,8 @@ if __name__ == '__main__':
     else:
         print("")
         print("=======================================")
-        print("Was not able to create a match plan :-(")
-    input("Press Enter to continue ...")
+        print("Konnte keinen Spielplan erstellen :-(")
+    input("Druecke eine Taste um zu Beenden ...")
 
 
 

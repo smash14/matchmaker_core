@@ -1,5 +1,5 @@
 {
-  "max_iterations": 1000000,
+  "max_iterations": 10000,
   "return_on_first_match_plan": false,
   "start_date_first_round": "",
   "end_date_first_round": "",
@@ -7,17 +7,17 @@
   "general_blocked_dates": [],
   "consecutive_matches": {
     "allow": 1,
-    "probability": 100
+    "probability": 50
   },
   "shuffle_matches": {
     "allow": 1,
-    "shuffle_part": 1.0
+    "shuffle_part": 0.4
   },
   "weight": {
-    "amount_consecutive_matches": 100,
+    "amount_consecutive_matches": 1,
     "distribution_home_away_matches": 1,
-    "amount_please_dont_play_dates": 1,
-    "distribution_game_days": 1
+    "amount_please_dont_play_dates": 10,
+    "distribution_game_days": 100
   },
   "teams": {
     "Moelln": {
