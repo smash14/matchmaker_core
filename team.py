@@ -3,10 +3,11 @@ from datetime import datetime
 
 class Team:
 
-    def __init__(self, team_name, available_dates_home_matches, blocked_dates_matches):
+    def __init__(self, team_name, available_dates_home_matches, blocked_dates_matches, please_dont_play_dates):
         self.team_name = team_name
         self.available_dates_home_matches = available_dates_home_matches  # provided by team
         self.blocked_dates_matches = blocked_dates_matches  # provided by team
+        self.please_dont_play_dates = please_dont_play_dates  # provided by team
         self._dates_home_matches = []
         self._dates_away_matches = []
         self._dates_matches = []  # home and away matches combined [H/A, DATE, OPPONENT]
@@ -14,6 +15,7 @@ class Team:
         self._total_home_matches = 0
         self._total_away_matches = 0
         self._total_consecutive_matches = 0  # matches both on Saturday and Sunday
+        self._scheduled_please_dont_play_dates = 0  # if a game is scheduled on a day which is asked to be blcoked
 
     @property
     def team_name(self):
@@ -41,8 +43,19 @@ class Team:
         # TODO: Proper error handling and sorting
         self._blocked_dates_matches = sorted(value)
 
+    @property
+    def please_dont_play_dates(self):
+        return self._please_dont_play_dates
+
+    @please_dont_play_dates.setter
+    def please_dont_play_dates(self, value):
+        # TODO: Proper error handling and sorting
+        self._please_dont_play_dates = sorted(value)
+
     def add_home_match_date(self, date, opponent):
         self._check_for_consecutive_match(date)
+        if date in self._please_dont_play_dates:
+            self._scheduled_please_dont_play_dates += 1
         self._dates_matches.append(["H", date, opponent])
         self._dates_home_matches.append([date, opponent])
         self._total_home_matches += 1
@@ -50,6 +63,8 @@ class Team:
 
     def add_away_match_date(self, date, opponent):
         self._check_for_consecutive_match(date)
+        if date in self._please_dont_play_dates:
+            self._scheduled_please_dont_play_dates += 1
         self._dates_matches.append(["A", date, opponent])
         self._dates_away_matches.append([date, opponent])
         self._total_away_matches += 1
@@ -75,6 +90,9 @@ class Team:
 
     def get_total_matches(self):
         return self._total_matches
+
+    def get_total_scheduled_please_dont_play_dates(self):
+        return self._scheduled_please_dont_play_dates
 
     def get_last_match_date(self):
         try:
@@ -105,7 +123,6 @@ class Team:
                     total_matches[1] += 1
         return total_matches
 
-
     def get_list_of_opponents(self, home_or_away="all"):
         """
         Returns a list of scheduled matches with opponents
@@ -124,3 +141,22 @@ class Team:
         if match_nr >= self._total_matches or match_nr < 0:  # Starting at 0 ?!
             return None
         return self._dates_matches[match_nr][1]
+
+    def get_distribution_home_away_matches(self):
+        """
+        get the distribution of home and away matches. The return value represents the most uneven distribution
+        :return: distribution factor of home and away matches
+        """
+        max_outlier = 0
+        curr_outlier = 0
+        for match in self._dates_matches:
+            if match[0] == "H":
+                curr_outlier += 1
+                if abs(curr_outlier) > max_outlier:
+                    max_outlier = abs(curr_outlier)
+            if match[0] == "A":
+                curr_outlier -= 1
+                if abs(curr_outlier) > max_outlier:
+                    max_outlier = abs(curr_outlier)
+        return max_outlier
+

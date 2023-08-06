@@ -1,12 +1,16 @@
 import json
 import random
+import sys
 from time import sleep
-
+from art import *
 from utils import convert_date_string_to_datetime, convert_date_string_list_to_datetime, check_for_consecutive_dates
-from evaluate_plan import get_total_consecutive_matches, get_end_of_first_round
+from evaluate_plan import get_total_consecutive_matches, get_end_of_first_round, get_team_with_most_consecutive_matches,\
+    get_team_with_most_uneven_distribution_matches, get_team_with_most_scheduled_please_dont_play_dates,\
+    get_total_amount_please_dont_play_dates, calculate_score, match_plan_to_report
 from team import Team
 from datetime import datetime
 import pandas
+from tqdm import tqdm
 
 
 def get_all_match_dates(teams, start_date):
@@ -36,7 +40,7 @@ def map_general_match_dates_to_teams(teams, all_match_dates):
             blocked_dates = team.blocked_dates_matches
             if match_date not in blocked_dates:
                 thisdict['away_match'].append(team)
-            if match_date in available_home_match_dates:
+            if match_date in available_home_match_dates and match_date not in blocked_dates:
                 thisdict['home_match'].append(team)
         map_general.append(thisdict)
     return map_general
@@ -140,7 +144,9 @@ def create_match_plan(general_map, end_date_first_round, start_date_sec_round, c
                 if curr_home_team.team_name == curr_away_team.team_name:
                     continue  # Skip as home team can not play against itself
                 if any(curr_away_team in sublist for sublist in thisdict['matches']):
-                    continue  # Skip if other team alredy has a match in this rounf
+                    continue  # Skip if other team already has a match in this round
+                if any(curr_home_team in sublist for sublist in thisdict['matches']):
+                    continue  # Skip if this team already has a match in this round
                 if _is_next_match_consecutive(curr_away_team):
                     if not _allow_consecutive_match():
                         continue  # Skip if next match would be a consecutive match which is not allowed
@@ -158,19 +164,6 @@ def create_match_plan(general_map, end_date_first_round, start_date_sec_round, c
                         start_date_sec_round_date = datetime(1970, 1, 1)
                     if entry['datetime'] < start_date_sec_round_date:
                         continue  # Don't Start second round until a given start date
-                """
-                # remove home team from home match list and away match list
-                if curr_home_team in entry['home_match']:
-                    entry['home_match'].remove(curr_home_team)
-                if curr_home_team in entry['away_match']:
-                    entry['away_match'].remove(curr_home_team)
-
-                # remove away team from away match and home match list, if needed
-                if curr_away_team in entry['away_match']:
-                    entry['away_match'].remove(curr_away_team)
-                if curr_away_team in entry['home_match']:
-                    entry['home_match'].remove(curr_away_team)
-                """
 
                 #  Modify team objects
                 curr_home_team.add_home_match_date(entry['datetime'], curr_away_team.team_name)
@@ -180,6 +173,7 @@ def create_match_plan(general_map, end_date_first_round, start_date_sec_round, c
                 home_team_already_matched = True
 
                 # print(f"-> {curr_home_team.team_name} -vs- {curr_away_team.team_name}")
+                # input("Press Enter to continue ...")
 
     def _check_round_complete(first_round=True):
         if first_round:
@@ -234,16 +228,18 @@ def create_match_plan(general_map, end_date_first_round, start_date_sec_round, c
             map_final.append(thisdict)
     if not second_round_done:
         raise Exception(f"Was not able to create a matching plan")
-    print("")
+    #print("")
     return map_final
 
 
 if __name__ == '__main__':
+    tprint("Ligaman +")
     # Parse json file
     with open('teams.json') as file:
         file_contents = file.read()
     parsed_json = json.loads(file_contents)
     teams_json = parsed_json['teams']
+    weight = parsed_json['weight']
     start_date_first_round = parsed_json['start_date_first_round']
     start_date_second_round = parsed_json['start_date_second_round']
     end_date_first_round = parsed_json['end_date_first_round']
@@ -252,15 +248,24 @@ if __name__ == '__main__':
                                  parsed_json['consecutive_matches']['probability']]
     allow_shuffle_matches = [parsed_json['shuffle_matches']['allow'],
                              parsed_json['shuffle_matches']['shuffle_part']]
-    iterations = parsed_json['iterations']
+    iterations = parsed_json['max_iterations']
+    if iterations == 0:
+        iterations = sys.maxsize
+    return_on_first_match_plan = parsed_json['return_on_first_match_plan']
 
     match_plan = []
-    for i in range(iterations):
+    report_match_plan = pandas.DataFrame()
+    report = ""
+    score = 999999
+
+    for i in tqdm(range(iterations)):
         try:
             # Create an instance for every team within the json file
             all_teams = [Team(team_line,
                               convert_date_string_list_to_datetime(teams_json[team_line]['available_dates_home_matches']),
-                              convert_date_string_list_to_datetime(teams_json[team_line]['blocked_dates_matches']))
+                              convert_date_string_list_to_datetime(teams_json[team_line]['blocked_dates_matches']),
+                              convert_date_string_list_to_datetime(teams_json[team_line]['please_dont_play_dates'])
+                              )
                          for team_line in teams_json]
             # print(f"Created an instance for {len(all_teams)} Teams")
 
@@ -271,49 +276,38 @@ if __name__ == '__main__':
             map_all_combinations = map_general_match_dates_to_teams(all_teams, all_match_dates)
 
             # Create a match plan
-
-            match_plan = create_match_plan(map_all_combinations, end_date_first_round, start_date_second_round,
+            curr_match_plan = create_match_plan(map_all_combinations, end_date_first_round, start_date_second_round,
                                            allow_consecutive_matches, allow_shuffle_matches)
-            print(f"Found a match plan on run {i+1}")
+
+            curr_score, curr_report = calculate_score(weight, all_teams)
+
+            if curr_score < score:
+                score = curr_score
+                match_plan = curr_match_plan
+                report = curr_report
+                report_match_plan = match_plan_to_report(match_plan, all_teams)
+                # print(report_match_plan)
+                print("")
+                print(f"Spielplan gefunden nach Iteration {i + 1} mit score {score}")
+
            # sleep(5)
-            break
+            if return_on_first_match_plan:
+                break
         except Exception as e:
-            #sleep(1)
-            print(f"Run {i}: Was not able to create a matching plan")
+            # sleep(1)
+            # print(f"Run {i}: Was not able to create a matching plan")
+            pass
 
     if match_plan:
-        headers_data_match_plan = ["Datum", "Heimmannschaft", "(H)", "(A)", "", "Gastmannschaft", "(H)", "(A)"]
-        # print("=================== FINAL MATCH PLAN ===================")
-        end_of_first_round = get_end_of_first_round(all_teams)
-        match_plan_to_print = []
-        for match_day in match_plan:
-            if match_day['matches']:
-                match_date = match_day['datetime']
-                #print(f"{match_date.strftime('%d.%m.%Y')}:")
-                for match in match_day['matches']:
-                    match_plan_to_print.append([match_date.strftime('%d.%m.'),
-                                                match[0].team_name,
-                                                match[0].get_amount_of_matches_until_date(match_date)[0],
-                                                match[0].get_amount_of_matches_until_date(match_date)[1],
-                                                "-vs-",
-                                                match[1].team_name,
-                                                match[1].get_amount_of_matches_until_date(match_date)[0],
-                                                match[1].get_amount_of_matches_until_date(match_date)[1]])
-                if match_day['datetime'] == end_of_first_round:
-                    match_plan_to_print.append(["--", "--", "--", "--", "--", "--", "--", "--"])
-        pandas.set_option('display.max_colwidth', None)
-        pandas.set_option('display.max_columns', None)
-        pandas.set_option('display.width', None)
-        data_table = pandas.DataFrame(match_plan_to_print, columns=headers_data_match_plan)
-        print(data_table)
         print("")
-        print(f"End of first round: {end_of_first_round.strftime('%d.%m.%Y')}")
+        print(report_match_plan)
+        print("")
+        print(report)
     else:
         print("")
         print("=======================================")
         print("Was not able to create a match plan :-(")
-    print("Press Enter to continue ...")
-    input()
+    input("Press Enter to continue ...")
 
 
 
