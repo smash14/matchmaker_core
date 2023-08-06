@@ -234,7 +234,8 @@ def create_match_plan(general_map, end_date_first_round, start_date_sec_round, c
 
 if __name__ == '__main__':
     tprint("Ligaman +")
-    print("===== V0.1 =====")
+    print("===== V0.2 =====")
+    print("Maintainer: Bjarne Andersen - b-andersen@arkaris.de")
     print("")
     # Parse json file
     try:
@@ -330,6 +331,10 @@ if __name__ == '__main__':
         print(report_match_plan)
         print("")
         print(report)
+        now = datetime.now()
+        dt_string = now.strftime("%Y%m%d_%H%M%S")
+        filename = dt_string + "_Spielplan.csv"
+        report_match_plan.to_csv(filename, sep=';')
     else:
         print("")
         print("=======================================")

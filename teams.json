@@ -1,6 +1,6 @@
 {
   "max_iterations": 10000,
-  "return_on_first_match_plan": false,
+  "return_on_first_match_plan": true,
   "start_date_first_round": "",
   "end_date_first_round": "",
   "start_date_second_round": "2024-01-01",
