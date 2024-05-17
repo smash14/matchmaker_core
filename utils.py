@@ -1,3 +1,5 @@
+import os
+import sys
 from datetime import datetime
 
 
@@ -28,3 +30,16 @@ def check_for_consecutive_dates(date1, date2):
     if abs((date1 - date2).days) == 1:
         return True
     return False
+
+
+def get_script_folder():
+    # determine if application is a script file or frozen exe
+    application_path = ""
+    if getattr(sys, 'frozen', False):
+        print("Program is an executable")
+        # application_path = os.path.dirname(sys.executable)
+        application_path = os.path.dirname(__file__)
+    elif __file__:
+        print("Program is native Python")
+        application_path = os.path.dirname(__file__)
+    return application_path

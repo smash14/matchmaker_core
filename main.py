@@ -1,9 +1,10 @@
 import json
+import os.path
 import random
 import sys
 from time import sleep
 from art import *
-from utils import convert_date_string_to_datetime, convert_date_string_list_to_datetime, check_for_consecutive_dates
+from utils import convert_date_string_to_datetime, convert_date_string_list_to_datetime, check_for_consecutive_dates, get_script_folder
 from evaluate_plan import get_total_consecutive_matches, get_end_of_first_round, get_team_with_most_consecutive_matches,\
     get_team_with_most_uneven_distribution_matches, get_team_with_most_scheduled_please_dont_play_dates,\
     get_total_amount_please_dont_play_dates, calculate_score, match_plan_to_report
@@ -228,22 +229,19 @@ def create_match_plan(general_map, end_date_first_round, start_date_sec_round, c
             map_final.append(thisdict)
     if not second_round_done:
         raise Exception(f"Was not able to create a matching plan")
-    #print("")
     return map_final
 
 
 if __name__ == '__main__':
-    tprint("Ligaman +")
-    print("===== V0.2 =====")
-    print("Maintainer: Bjarne Andersen - b-andersen@arkaris.de")
-    print("")
-    # Parse json file
+    print("=============== V0.4 ==================", flush=True)
+    filename = ""
     try:
-        with open('teams.json') as file:
+        script_folder = get_script_folder()
+        filename = os.path.join(script_folder, 'teams.json')
+        with open(filename) as file:
             file_contents = file.read()
     except FileNotFoundError:
-        print("Fehler, konnte die teams.json Datei nicht finden")
-        input("Druecke eine Taste um zu beenden ...")
+        print(f"Fehler, konnte die teams.json Datei nicht finden. Pfad: {filename}")
         sys.exit(1)
 
     try:
@@ -263,10 +261,9 @@ if __name__ == '__main__':
             iterations = sys.maxsize
         return_on_first_match_plan = parsed_json['return_on_first_match_plan']
     except Exception as e:
-        print("Fehler beim Verarbeiten der teams.json Datei mit folgender Fehlermeldung:")
-        print("")
-        print(e)
-        input("Druecke eine Taste um zu Beenden ...")
+        print("Fehler beim Verarbeiten der teams.json Datei mit folgender Fehlermeldung:", flush=True)
+        print("", flush=True)
+        print(e, flush=True)
         sys.exit(1)
 
     tmp_team = [Team(team_line,
@@ -276,17 +273,18 @@ if __name__ == '__main__':
                       )
                  for team_line in teams_json]
 
-    print(f"{len(tmp_team)} Vereine gefunden. Versuche Spielplan zu erstellen:")
-    print("")
-    sleep(5)
-
+    print(f"{len(tmp_team)} Vereine gefunden. Versuche Spielplan zu erstellen:", flush=True)
 
     match_plan = []
     report_match_plan = pandas.DataFrame()
     report = ""
     score = 999999
 
-    for i in tqdm(range(iterations)):
+    #for i in tqdm(range(iterations)):
+    for i in range(iterations):
+        percentage = (i * 100) / iterations
+        if percentage%10 == 0:
+            print(f"RUN:{int(percentage)}", flush=True)
         try:
             # Create an instance for every team within the json file
             all_teams = [Team(team_line,
@@ -315,8 +313,8 @@ if __name__ == '__main__':
                 report = curr_report
                 report_match_plan = match_plan_to_report(match_plan, all_teams)
                 # print(report_match_plan)
-                print("")
-                print(f"Spielplan gefunden nach Iteration {i + 1} mit score {score}")
+                # print("=======================================")
+                print(f"Spielplan gefunden nach Iteration {i + 1} mit score {score}", flush=True)
 
            # sleep(5)
             if return_on_first_match_plan:
@@ -327,19 +325,20 @@ if __name__ == '__main__':
             pass
 
     if match_plan:
-        print("")
-        print(report_match_plan)
-        print("")
-        print(report)
+        print("=======================================", flush=True)
+        print("Spielplan erstellt", flush=True)
+        #print(report_match_plan)
+        #print("")
+        #print(report)
         now = datetime.now()
         dt_string = now.strftime("%Y%m%d_%H%M%S")
-        filename = dt_string + "_Spielplan.csv"
+        #filename = dt_string + "_Spielplan.csv"
+        filename = "spielplan.csv"
         report_match_plan.to_csv(filename, sep=';')
     else:
-        print("")
+        # print("")
         print("=======================================")
-        print("Konnte keinen Spielplan erstellen :-(")
-    input("Druecke eine Taste um zu Beenden ...")
+        print("Konnte keinen Spielplan erstellen :-(", flush=True)
 
 
 
