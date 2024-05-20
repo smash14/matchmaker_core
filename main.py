@@ -1,17 +1,18 @@
 import json
+import logging
 import os.path
 import random
 import sys
 from time import sleep
-from art import *
-from utils import convert_date_string_to_datetime, convert_date_string_list_to_datetime, check_for_consecutive_dates, get_script_folder
+# from art import *
+from utils import convert_date_string_to_datetime, convert_date_string_list_to_datetime, check_for_consecutive_dates, get_executable_location
 from evaluate_plan import get_total_consecutive_matches, get_end_of_first_round, get_team_with_most_consecutive_matches,\
     get_team_with_most_uneven_distribution_matches, get_team_with_most_scheduled_please_dont_play_dates,\
     get_total_amount_please_dont_play_dates, calculate_score, match_plan_to_report
 from team import Team
 from datetime import datetime
 import pandas
-from tqdm import tqdm
+# from tqdm import tqdm
 
 
 def get_all_match_dates(teams, start_date):
@@ -233,15 +234,16 @@ def create_match_plan(general_map, end_date_first_round, start_date_sec_round, c
 
 
 if __name__ == '__main__':
-    print("=============== V0.4 ==================", flush=True)
+    print("=============== V0.5 ==================", flush=True)
     filename = ""
     try:
-        script_folder = get_script_folder()
+        script_folder = get_executable_location()
         filename = os.path.join(script_folder, 'teams.json')
         with open(filename) as file:
             file_contents = file.read()
     except FileNotFoundError:
         print(f"Fehler, konnte die teams.json Datei nicht finden. Pfad: {filename}")
+        logging.error(f"Fehler, konnte die teams.json Datei nicht finden. Pfad: {filename}")
         sys.exit(1)
 
     try:
@@ -264,6 +266,7 @@ if __name__ == '__main__':
         print("Fehler beim Verarbeiten der teams.json Datei mit folgender Fehlermeldung:", flush=True)
         print("", flush=True)
         print(e, flush=True)
+        logging.error(f"Fehler beim Verarbeiten der teams.json Datei mit folgender Fehlermeldung: {e}")
         sys.exit(1)
 
     tmp_team = [Team(team_line,
@@ -274,6 +277,7 @@ if __name__ == '__main__':
                  for team_line in teams_json]
 
     print(f"{len(tmp_team)} Vereine gefunden. Versuche Spielplan zu erstellen:", flush=True)
+    logging.info(f"{len(tmp_team)} Vereine gefunden. Versuche Spielplan zu erstellen:")
 
     match_plan = []
     report_match_plan = pandas.DataFrame()
@@ -315,6 +319,7 @@ if __name__ == '__main__':
                 # print(report_match_plan)
                 # print("=======================================")
                 print(f"Spielplan gefunden nach Iteration {i + 1} mit score {score}", flush=True)
+                logging.info(f"Spielplan gefunden nach Iteration {i + 1} mit score {score}")
 
            # sleep(5)
             if return_on_first_match_plan:
@@ -333,11 +338,13 @@ if __name__ == '__main__':
         now = datetime.now()
         dt_string = now.strftime("%Y%m%d_%H%M%S")
         #filename = dt_string + "_Spielplan.csv"
-        filename = "spielplan.csv"
+        script_folder = get_executable_location()
+        filename = os.path.join(script_folder, "spielplan.csv")
+        logging.info(f"saving generated match plan as csv to {filename}")
         report_match_plan.to_csv(filename, sep=';')
     else:
         # print("")
-        print("=======================================")
+        print("=======================================", flush=True)
         print("Konnte keinen Spielplan erstellen :-(", flush=True)
 
 

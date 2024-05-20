@@ -1,4 +1,5 @@
-pandas
-pyinstaller
-art
-tqdm
+#PythonV3.11.1
+pandas==2.2.2
+pyinstaller==6.6.0
+#art
+#tqdm
