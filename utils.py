@@ -37,11 +37,11 @@ def get_script_folder():
     # determine if application is a script file or frozen exe
     application_path = ""
     if getattr(sys, 'frozen', False):
-        logging.info("Ligaman Pro is running as executable")
+        logging.info("matchmaker_core is running as executable")
         # application_path = os.path.dirname(sys.executable)
         application_path = os.path.dirname(__file__)
     elif __file__:
-        logging.info("Ligaman Pro is running native Python")
+        logging.info("matchmaker_core is running native Python")
         application_path = os.path.dirname(__file__)
     return application_path
 
@@ -50,9 +50,9 @@ def get_executable_location():
     # determine if application is a script file or frozen exe
     application_path = ""
     if getattr(sys, 'frozen', False):
-        logging.info("Ligaman Pro is running as executable")
+        logging.info("matchmaker_core is running as executable")
         application_path = os.path.dirname(sys.executable)
     elif __file__:
-        logging.info("Ligaman Pro is running native Python")
+        logging.info("matchmaker_core is running native Python")
         application_path = os.path.dirname(__file__)
     return application_path
